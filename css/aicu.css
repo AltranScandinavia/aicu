@@ -1,0 +1,31 @@
+body {
+  min-width: 250px;
+  overflow-x: hidden;
+  /*font-family: Arial,Liberation Sans,DejaVu Sans,sans-serif;*/
+}
+a:active,
+a:hover {
+  outline: 0;
+}
+a {
+  color: #428bca;
+  text-decoration: none;
+}
+
+a:hover,
+a:focus {
+  color: #2a6496;
+  text-decoration: underline;
+}      
+a.new_items_found {
+  font-weight: bold;
+}
+
+div {
+  display: block;
+  padding: 5px;
+  width: 200px;
+}
+span {
+  padding-right: 5px;
+}

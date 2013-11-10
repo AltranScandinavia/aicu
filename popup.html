@@ -2,37 +2,20 @@
 <html>
   <head>
     <title>Getting Started Extension's Popup</title>
-    <style>
-      body {
-        min-width: 157px;
-        overflow-x: hidden;
-        font-family: Arial,Liberation Sans,DejaVu Sans,sans-serif;
-      }
-      a:active,
-      a:hover {
-        outline: 0;
-      }
-      a {
-        color: #428bca;
-        text-decoration: none;
-      }
-
-      a:hover,
-      a:focus {
-        color: #2a6496;
-        text-decoration: underline;
-      }      
-    </style>
-
-    <!--
-      - JavaScript and HTML must be in separate files: see our Content Security
-      - Policy documentation[1] for details and explanation.
-      -
-      - [1]: http://developer.chrome.com/extensions/contentSecurityPolicy.html
-     -->
-    <script src="popup.js"></script>
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+    <link href="css/aicu.css" rel="stylesheet">
   </head>
-  <body>
-  </body>
+<body>
+
+  <div id="personal-feed"><span class="glyphicon glyphicon-user"></span><a id="personal-link" href="https://altranintranet.sharepoint.com" target="_blank">Personal News Feed</a></div>
+  
+  <div id="internal-feed"><span class="glyphicon glyphicon-list-alt"></span><a id="internal-link" href="https://altranintranet.sharepoint.com" target="_blank">Internal News Feed</a></div>
+  
+  <div id="forum-feed"><span class="glyphicon glyphicon-book"></span><a id="forum-link" href="https://altranintranet.sharepoint.com/AltranForum/SitePages/Community%20Home.aspx" target="_blank">Altran Forum</a></div>
+  
+  <div id="event-feed"><span class="glyphicon glyphicon-calendar"></span><a id="event-link" href="https://altranintranet.sharepoint.com" target="_blank">Altran Events</a></div></body>
+
+  <script src="popup.js"></script>
+</body>
 </html>
 
