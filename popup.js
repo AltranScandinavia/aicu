@@ -32,7 +32,7 @@ UnreadContent.prototype.displayUpdatesForSite = function(site) {
   // Create the html-elements from the stored site data
   var siteContainer = $('<div id="' + site.id + '" class="site-container"/>');
   
-  var siteHeader = $('<h4><a class="site-link" href="https://altranintranet.sharepoint.com" target="_blank">' + site.name + '</a></h4>');
+  var siteHeader = $('<h4><a class="site-link" href="' + site.url + '" target="_blank">' + site.name + '</a></h4>');
   siteContainer.append(siteHeader);
   
   var i, j, list, items, sectionElem, listTitleElem, listElem, anyNewItemsFound = false;
