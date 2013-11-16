@@ -1,5 +1,4 @@
-// Shows the new item and removed the badge from the extension icon
-var KEYS = {personalNewsFeed: 'PERSONAL_NEWS_FEED', internalNews: 'INTERNAL_NEWS_FEED', altranForum: 'ALTRAN_FORUM', altranEvents: 'ALTRAN_EVENT_CALENDAR'};
+// Shows the new items and removes the badge from the extension's icon
 
 var decrementBadgeText = function() {
   chrome.browserAction.getBadgeText(function (text) {
@@ -12,77 +11,56 @@ var decrementBadgeText = function() {
   });
 };
 
-var showUnreadLists = {
-  showPersonalNewsFeed: function () {
-    var me = this;
-    chrome.storage.local.get('PERSONAL_NEWS_FEED', function (newsFeedItems) {
-      var newsFeedItem = newsFeedItems['PERSONAL_NEWS_FEED'];
-      
-      var newItemsFound = !(newsFeedItem !== undefined && newsFeedItem.newItemFound == false);
+function UnreadContent() {
 
-      me.createLink.call(me, newItemsFound, 'personal');
+};
 
-      var lastStoredDate = (!newsFeedItem || !newsFeedItem.newestProcessed) ? new Date().toString : newsFeedItem.newestProcessed;
-      newsFeedItem = { 'newItemFound': false, 'newestProcessed': lastStoredDate};
-      
-      chrome.storage.local.set({'PERSONAL_NEWS_FEED': newsFeedItem}, function() {
-        if (chrome.extension.lastError) {
-          console.log('An error occurred: ' + chrome.extension.lastError.message);
-        }
-      });
-      chrome.browserAction.setBadgeText({'text':''});
-    });
-  },
-  showInternalNewsFeed: function () {
-    var me = this;
-    me.showLinkForItem.call(me, 'INTERNAL_NEWS_FEED', 'internal');
-
-  },  
-  showAltranForum: function () {
-    var me = this;
-    me.showLinkForItem.call(me, 'ALTRAN_FORUM', 'forum');
-
-  },    
-  
-  showAltranEvents: function () {
-    var me = this;
-    me.showLinkForItem.call(me, 'ALTRAN_EVENT_CALENDAR', 'event');
-  },  
-  showLinkForItem: function (storageKey, linkName) {
-    var me = this;
-    chrome.storage.local.get(storageKey, function (newsFeedItems) {
-      var newsFeedItem = newsFeedItems[storageKey];
-      
-      var newItemsFound = !(newsFeedItem !== undefined && newsFeedItem.newItemFound == false);
-      me.createLink.call(me, newItemsFound, linkName);
-
-      var lastStoredDate = (!newsFeedItem || !newsFeedItem.newestProcessed) ? new Date().toString : newsFeedItem.newestProcessed;
-      newsFeedItem = { 'newItemFound': false, 'newestProcessed': lastStoredDate};
-      var data = {};
-      data[storageKey] = newsFeedItem;
-      chrome.storage.local.set(data, function() {
-        if (chrome.extension.lastError) {
-          console.log('An error occurred: ' + chrome.extension.lastError.message);
-        }
-      });
-      chrome.browserAction.setBadgeText({'text':''});
-    });
-  },  
-
-  
-  createLink: function (newItemsFound, linkName) {
-    var link = document.getElementById(linkName+'-link');
-    if (newItemsFound) {
-      link.classList.add('new_items_found');
-    } else {
-      link.classList.remove('new_items_found');
+UnreadContent.prototype.display = function() {
+  var me = this;
+  chrome.storage.local.get(function(data) { 
+    var storedSite;
+    for (key in data) {
+      if (!data.hasOwnProperty(key)) continue;
+      storedSite = data[key];
+      me.displayUpdatesForSite(storedSite);
     }
+  });
+  chrome.browserAction.setBadgeText({'text':''});
+};
+
+UnreadContent.prototype.displayUpdatesForSite = function(site) {
+  // Create the html-elements from the stored site data
+  var siteContainer = $('<div id="' + site.id + '" class="site-container"/>');
+  
+  var siteHeader = $('<h4><a class="site-link" href="https://altranintranet.sharepoint.com" target="_blank">' + site.name + '</a></h4>');
+  siteContainer.append(siteHeader);
+  
+  var i, j, list, items, sectionElem, listTitleElem, listElem, anyNewItemsFound = false;
+  for (i=0; i<site.lists.length; i++) {
+    list = site.lists[i];
+    if (list.newItemsFound === false || list.newItems.length === 0) continue;
+    anyNewItemsFound = true;
+    
+    sectionElem = $('<section></section')
+    listTitleElem = $('<h5 class="list-header">' + list.title + '</h5>');
+    sectionElem.append(listTitleElem);
+    listElem = $('<ul class="list-items" />');
+    for (j=0; j<list.newItems.length; j++) {
+      listElem.append($('<li class="list-item">' + list.newItems[j].title + '</li>'));
+    }
+    
+    sectionElem.append(listElem);
+    siteContainer.append(sectionElem);
   }
+  
+  if (anyNewItemsFound === false) {
+    siteContainer.append('<em class="no-new-items">No new items</em>');
+  }
+  siteContainer.append($('<hr class="site-underline"/>'));
+  $('div.main-container').append(siteContainer);
 };
 
 document.addEventListener('DOMContentLoaded', function () {
-  showUnreadLists.showPersonalNewsFeed();
-  showUnreadLists.showInternalNewsFeed();
-  showUnreadLists.showAltranForum();
-  showUnreadLists.showAltranEvents();
+  var unreadContent = new UnreadContent();
+  unreadContent.display();
 });

@@ -1,7 +1,6 @@
 body {
-  min-width: 250px;
+  min-width: 350px;
   overflow-x: hidden;
-  /*font-family: Arial,Liberation Sans,DejaVu Sans,sans-serif;*/
 }
 a:active,
 a:hover {
@@ -20,12 +19,23 @@ a:focus {
 a.new_items_found {
   font-weight: bold;
 }
+a.site-link {
 
-div {
-  display: block;
-  padding: 5px;
-  width: 200px;
 }
 span {
   padding-right: 5px;
+}
+em.no-new-items {
+}
+h5.list-header {
+  margin: 5px;
+  font-weight: bold;
+}
+h4 {
+  margin-top: 0px;
+  margin-bottom: 0px;
+}
+hr {
+  margin-top: 5px;
+  margin-bottom: 10px;
 }

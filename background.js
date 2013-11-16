@@ -1,13 +1,11 @@
+// Checks the current user's followed sites for updates.
+// If an item has been modified or added since last time the script was run, 
+// the change will be stored to local storage and the badge-text will be updated.
+// popup.html is called when clicking on the extension badge.
 
-var KEYS = {personalNewsFeed: 'PERSONAL_NEWS_FEED', internalNews: 'INTERNAL_NEWS_FEED', altranForum: 'ALTRAN_FORUM', altranEvents: 'ALTRAN_EVENT_CALENDAR'};
+var BASE_URL = 'https://altranintranet.sharepoint.com';
 
-var BASE_URL      = 'https://altranintranet.sharepoint.com';
-
-var PERSONAL_NEWS_FEED = '/_api/social.feed/my/news';
-var INTERNAL_NEWS_FEED = "/news/_api/web/lists/getbytitle('posts')/items?$orderby=Modified desc";
-var ALTRAN_FORUM       = "/AltranForum/_api/web/lists/getbytitle('Discussions List')/items?$orderby=Modified desc";
-var ALTRAN_EVENTS      = "/AltranEventCalendar/_api/web/lists/getbytitle('EventCalendar')/items?$orderby=Modified desc";
-
+var POLL_INTERVAL_IN_MINUTES = 10;
 
 function BackgroundPoller () {
 
@@ -40,104 +38,209 @@ BackgroundPoller.prototype.fetchData = function (URL, callback) {
   } 
 };
 
-BackgroundPoller.prototype.checkPersonalNewsFeed = function () {
-  var me = this;
+BackgroundPoller.prototype.templateFilterBuilder = function () {
+  // Only check for updates in lists that are in these categories:
   
-  function checkPersonalNewsFeedData(data) {
-    var latestUpdate = data.d.SocialFeed.NewestProcessed;
+  // http://mirusp2010.blogspot.se/2013/03/list-template-id.html
+  // 101   Document library
+  // 103   Links list
+  // 104   Announcements list
+  // 106   Events list
+  // 107   Tasks list
+  // 108   Discussion board
+  // 119   Wiki Page library
+  // 301   Blog Posts list
+  // 302   Blog Comments list
 
-    chrome.storage.local.get('PERSONAL_NEWS_FEED', function (newsFeedItems) {
-      var lastStoredDate = new Date();
-      var newsFeedItem = newsFeedItems['PERSONAL_NEWS_FEED'];
-      
-      if (newsFeedItem && newsFeedItem.newestProcessed) {
-        lastStoredDate = new Date(newsFeedItem.newestProcessed);
+  if (!this.templateFilter) {
+    var followedTemplates = [101, 103, 104, 106, 107, 108, 119, 301, 302];
+    this._templateFilter = ''; 
+    for (var i = 0; i<followedTemplates.length; i++) {
+      this._templateFilter+='(BaseTemplate eq ' + followedTemplates[i] + ')';
+      if (followedTemplates.length>(i+1)) {
+        this._templateFilter+= ' or ';
       }
-      var lastPolledDate = new Date(data.d.SocialFeed.Threads.results[0].RootPost.ModifiedTime);
-
-      if (lastStoredDate.toString() != lastPolledDate.toString()) {
-        console.log('new item found, display notification');
-        newsFeedItem = { 'newItemFound': true, 'newestProcessed': lastPolledDate.toString()};
-        chrome.storage.local.set({'PERSONAL_NEWS_FEED': newsFeedItem}, function() {
-          if (chrome.extension.lastError) {
-            console.log('An error occurred: ' + chrome.extension.lastError.message);
-          }
-        });
-        me.incrementBadgeText();
-       
-      }
-    });
+    }; 
   }
-  me.fetchData(BASE_URL + PERSONAL_NEWS_FEED, checkPersonalNewsFeedData);
+  return this._templateFilter;
 };
 
-BackgroundPoller.prototype.checkInternalNewsFeed = function () {
+BackgroundPoller.prototype.checkFollowedSites = function () {
+  // Fetch the sites the current user is following:
+  var sitesURL = BASE_URL + '/_api/social.following/my/followed(types=4)?$orderby=Name asc';
   var me = this;
-  me.checkList.call(me, 'INTERNAL_NEWS_FEED', BASE_URL + INTERNAL_NEWS_FEED);
+  var followedSitesCallback = function(data) { 
 
-};
- 
-BackgroundPoller.prototype.checkAltranForum = function () {
-  var me = this;
-  me.checkList.call(me, 'ALTRAN_FORUM', BASE_URL + ALTRAN_FORUM);
-
-};
-
-BackgroundPoller.prototype.checkAltranEvents = function () {
-  var me = this;
-  me.checkList.call(me, 'ALTRAN_EVENT_CALENDAR', BASE_URL + ALTRAN_EVENTS);
-
-};
-BackgroundPoller.prototype.checkList = function (storageKey, listUrl) {
-  var me = this;
+    var followedSites = data.d.Followed.results;
+    var i = 0;
+    var siteName, siteUrl;
+    for (i = 0; i<followedSites.length; i++) {
+      siteName = followedSites[i].Name;
+      siteUrl = followedSites[i].Uri;
+      me.fetchFollowedListsForSite(followedSites[i]);
+      if ( i > 2) {
+        //break; // testilitest ********************************************************
+      }
+    }
+  };
+  this.fetchData(sitesURL, followedSitesCallback);
   
-  function checkListDataForChanges(data) {
-    var latestUpdate = data.d.results[0].Modified;
+};
+
+BackgroundPoller.prototype.fetchFollowedListsForSite = function (site) {
+  
+  if (site.Uri.indexOf('sharepoint.com:443/personal/') != -1) {
+    return; // Ignore personal site
+  }
+  if (site.Uri.indexOf('https://altranintranet.sharepoint.com:443/News') == -1) {    
+    //return; // Only test news   
+  }
+  
+  var me = this;
+  var templateFilter = me.templateFilterBuilder.call(me);
+  
+  var listsURL = site.Uri + '/_api/lists?$filter=' + templateFilter;
+  var checkListsForUpdatesCb = function (lists) {
+    me.checkListsForUpdates(site, lists);
+  };
+  backgroundPoller.fetchData(listsURL, checkListsForUpdatesCb);
+};
+
+BackgroundPoller.prototype.checkListsForUpdates = function (site, lists) {
+  var me = this;
+  var siteLists = lists.d.results;
+  
+  
+  chrome.storage.local.get(site.Id, function (storedData) {
+    var siteObject = storedData[site.Id];
+    siteObject = siteObject == undefined ? {} : siteObject;
+    siteObject.name = site.Name;
+    siteObject.id = site.Id;
+    siteObject.url = site.Uri;
+
+    var updatedLists = [];
+    var onComplete = function(listToStore) {
+      updatedLists.push(listToStore);
+      if (updatedLists.length === siteLists.length) {
+        me.storeUpdatedLists(site, updatedLists);
+      }
+    };
+    var i = 0;
+    var listTitle, listId;
+    for (i = 0; i<siteLists.length; i++) {
+      var list = siteLists[i];
+      var storedList = me.getListById(list.Id, siteObject.lists);
+      me.checkListForUpdates(site, list, storedList, onComplete);
+    }
+
+  });
+}; 
+BackgroundPoller.prototype.getListById = function (listId, lists) {
+  if (lists===undefined || lists.length===0) {
+    return undefined;
+  }
+  var i;
+  for (i=0; i<lists.length; i++) {
+    if (lists[i].id === listId) {
+      return lists[i];
+    }
+  }
+  return undefined;
+};
+
+BackgroundPoller.prototype.checkListForUpdates = function (site, list, storedList, onComplete) {
+  var me = this;
+  var itemsUrl = site.Uri + "/_api/Web/Lists(guid'" + list.Id + "')/Items?$orderby=Modified desc";
+  
+  var itemsCallback = function(items) {
     
-    chrome.storage.local.get(storageKey, function (listDataItems) {
-      var lastStoredDate = new Date();
-      var newsFeedItem = listDataItems[storageKey];
+    if (storedList == undefined) {
+      // List not previoiusly stored, add it.
+      var listToStore = { 
+        'id': list.Id,
+        'title': list.Title,
+        'newItemFound': false, 
+        'newestProcessed': new Date(list.LastItemModifiedDate).toString(), 
+        'newItems': []
+      };
+                        
+      onComplete(listToStore);
+    } else {
+      // Compare new list to previously stored list
+      var lastStoredDate = new Date(storedList.newestProcessed);
 
-      if (newsFeedItem && newsFeedItem.newestProcessed) {
-        lastStoredDate = new Date(newsFeedItem.newestProcessed);
-      }
-      var lastPolledDate = new Date(data.d.results[0].Modified);
-
+      var lastPolledDate = new Date(list.LastItemModifiedDate);
       if (lastStoredDate.toString() != lastPolledDate.toString()) {
-        newsFeedItem = { 'newItemFound': true, 'newestProcessed': lastPolledDate.toString()};
-        var itemData = {};
-        itemData[storageKey] = newsFeedItem;
-        chrome.storage.local.set(itemData, function() {
-          if (chrome.extension.lastError) {
-            console.log('An error occurred: ' + chrome.extension.lastError.message);
+        // New items found
+        
+        var listToStore = { 
+          'id': list.Id,
+          'title': list.Title,
+          'newItemFound': true, 
+          'newestProcessed': lastStoredDate.toString(), 
+          'newItems': []
+        };  
+        items = items.d.results;
+        var newItems = [];
+        var i, newItem, item, modified;
+        for (i=0; i<items.length; i++) {
+          item = items[i];
+          modified = new Date(item.Modified);
+          if (modified > lastStoredDate) {
+            newItem = {
+              'title': item.Title, 
+              'created': item.Created, 
+              'modified': item.Modified, 
+              'type': item.__metadata.type
+              //,'parent': item.ParentList.__deferred.uri
+            };
+            newItems.push(newItem);
           }
-        });
+        }
+        listToStore.newItems = newItems;
+        onComplete(listToStore);
         me.incrementBadgeText();
+      } else {
+        // No new items
+        var listToStore = {
+          'id': list.Id,
+          'title': list.Title,
+          'newItemFound': false,
+          'newestProcessed': lastStoredDate.toString(),
+          'newItems': []
+        };
+        onComplete(listToStore);
       }
-    });
-  }
-  me.fetchData(listUrl, checkListDataForChanges);
+    }
+  };
+  me.fetchData(itemsUrl, itemsCallback);
 };
 
+BackgroundPoller.prototype.storeUpdatedLists = function (site, lists) {
+  var me = this;
+  var siteObject = {};
+  siteObject.name = site.Name;
+  siteObject.id = site.Id;
+  siteObject.url = site.Uri;
+  siteObject.lists = lists;
+  var itemData = {};
+  itemData[site.Id] = siteObject;
+  chrome.storage.local.set(itemData, function() {
+    if (chrome.extension.lastError) {
+      console.log('An error occurred: ' + chrome.extension.lastError.message);
+    }
+  });
+};
 var backgroundPoller = new BackgroundPoller();
 
 function pollSP() {
-
-  console.log('requesting personal DATA');
-  backgroundPoller.checkPersonalNewsFeed();
   
-  console.log('requesting internal DATA');
-  backgroundPoller.checkInternalNewsFeed();
-  
-  console.log('requesting forum DATA');
-  backgroundPoller.checkAltranForum();
-
-  console.log('requesting event DATA');
-  backgroundPoller.checkAltranEvents();
+  console.log('Checking followed sites...     timestamp: ' + new Date().toISOString() );
+  backgroundPoller.checkFollowedSites();
   
   setTimeout(function() {
     pollSP();
-  }, 10*60*1000);
+  }, POLL_INTERVAL_IN_MINUTES*60*1000);
 }
 
 pollSP();
